@@ -1,4 +1,4 @@
-def write_job(fname, header, job):
+def write_job(fname, header, job, platform='slurm'):
     """
     Write a single job PBS script.
     
@@ -6,6 +6,7 @@ def write_job(fname, header, job):
     - fname: .pbs file to create
     - header: string with directives and common setup
     - job: strings with command to run
+    - platform: unused (for compatibility with write_array_job API)
     """
     with open(fname, 'w+', newline='\n') as f:
         f.write(header)
@@ -13,7 +14,7 @@ def write_job(fname, header, job):
 
     print(f'wrote job to {fname}')
 
-def write_array_job(fname, header, jobs):
+def write_array_job(fname, header, jobs, platform='slurm'):
     """
     Write an array job PBS script.
     
@@ -21,6 +22,7 @@ def write_array_job(fname, header, jobs):
     - fname: .pbs file to create
     - header: string with directives and common setup
     - job_list: list of strings with commands to run for each array job
+    - platform: 'slurm' or 'pbs'
     
     Sample usage:
     ```
@@ -40,12 +42,18 @@ def write_array_job(fname, header, jobs):
 
         module load python3
         '''
-        write_array_job('jobs/array_job.pbs', header, job_list)
+        write_array_job('jobs/array_job.pbs', header, job_list, platform='pbs')
         ```
     """
+    # Look up task ID
+    task_id = {
+        'pbs': '$PBS_ARRAY_INDEX',
+        'slurm': '$SLURM_ARRAY_TASK_ID'
+    }[platform.lower()]
+
     with open(fname, 'w+', newline='\n') as f:
         f.write(header)
-        f.write('case $PBS_ARRAY_INDEX in\n')
+        f.write(f'case {task_id} in\n')
         for job_num, job_str in enumerate(jobs):
             f.write(f'{job_num+1})\n{job_str}\n;;\n')
         f.write('esac\n')
