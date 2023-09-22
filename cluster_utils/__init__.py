@@ -144,7 +144,7 @@ def get_default_job_fname(job_name, job_dir=DEFAULT_JOB_DIR):
     """
     return os.path.join(job_dir, job_name, 'jobs', f'{uuid.uuid1()}.pbs') 
 
-def run_job(fname=None, dry_run=False, **job_kwargs):
+def run_job(fname=None, dry_run=False, verbose=True, **job_kwargs):
     """
     
     Arguments:
@@ -164,9 +164,16 @@ def run_job(fname=None, dry_run=False, **job_kwargs):
     job_string = get_job_string(**job_kwargs)
     with open(fname, 'w+', newline='\n') as f:
         f.write(job_string)
+    if verbose:
+        print(f'wrote job to {fname}')
 
-    if not dry_run:
+    if dry_run:
+        if verbose:
+            print('dry run; not running job')
+    else:
         os.system(f'sbatch {fname}')
+        if verbose:
+            print(f'submitted job {fname}')
 
 
 """Legacy code below"""
