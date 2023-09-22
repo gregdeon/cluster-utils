@@ -103,10 +103,13 @@ def get_header(job_name, allocation, walltime_mins, nodes, cpus, mem_gb=16, gpus
 #PBS -j oe -o {output_path}
 {array_str}'''
 
-def get_job_string(job=None, job_array=None, prefix='', **header_kwargs):
+def get_job_string(job=None, job_array=None, prefix='', slurm=False, **header_kwargs):
     """
     Build a job string from a header and a job command.
     """
+    if slurm:
+        raise NotImplementedError('TODO: slurm array jobs')
+
     if job is None and job_array is None:
         raise ValueError('Must specify either job or job_array')
     if job is not None and job_array is not None:
@@ -152,6 +155,7 @@ def write_job(fname, job, header):
     - fname: .pbs file to create
     - header: string with directives and common setup
     - job: strings with command to run
+    - platform: unused (for compatibility with write_array_job API)
     """
     with open(fname, 'w+', newline='\n') as f:
         f.write(header)
@@ -159,7 +163,7 @@ def write_job(fname, job, header):
 
     print(f'wrote job to {fname}')
 
-def write_array_job(fname, header, jobs):
+def write_array_job(fname, header, jobs, platform='slurm'):
     """
     Write an array job PBS script.
     
@@ -167,6 +171,7 @@ def write_array_job(fname, header, jobs):
     - fname: .pbs file to create
     - header: string with directives and common setup
     - job_list: list of strings with commands to run for each array job
+    - platform: 'slurm' or 'pbs'
     
     Sample usage:
     ```
@@ -186,12 +191,18 @@ def write_array_job(fname, header, jobs):
 
         module load python3
         '''
-        write_array_job('jobs/array_job.pbs', header, job_list)
+        write_array_job('jobs/array_job.pbs', header, job_list, platform='pbs')
         ```
     """
+    # Look up task ID
+    task_id = {
+        'pbs': '$PBS_ARRAY_INDEX',
+        'slurm': '$SLURM_ARRAY_TASK_ID'
+    }[platform.lower()]
+
     with open(fname, 'w+', newline='\n') as f:
         f.write(header)
-        f.write('case $PBS_ARRAY_INDEX in\n')
+        f.write(f'case {task_id} in\n')
         for job_num, job_str in enumerate(jobs):
             f.write(f'{job_num+1})\n{job_str}\n;;\n')
         f.write('esac\n')
