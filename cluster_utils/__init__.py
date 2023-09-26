@@ -100,7 +100,7 @@ def get_header(job_name, allocation, output_dir, walltime_mins=180, nodes=1, cpu
 #PBS -l walltime={walltime_str},select={nodes}:ncpus={cpus}:mem={mem_gb}gb{gpu_str}{gpu_mem_str}
 #PBS -N {job_name}
 #PBS -A {allocation}
-#PBS -j oe 
+#PBS -j oe
 #PBS -o {output_path}
 {array_str}'''
 

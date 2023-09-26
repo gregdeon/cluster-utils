@@ -23,7 +23,7 @@ def test_get_header():
 #PBS -l walltime=01:00:00,select=1:ncpus=1:mem=16gb
 #PBS -N example_job
 #PBS -A allocation_name
-#PBS -j oe 
+#PBS -j oe
 #PBS -o output_dir/out.txt
 """
 
@@ -41,7 +41,7 @@ def test_get_header():
 #PBS -l walltime=01:00:00,select=1:ncpus=1:mem=16gb:ngpus=1:gpu_mem=16gb
 #PBS -N example_job
 #PBS -A allocation_name
-#PBS -j oe 
+#PBS -j oe
 #PBS -o output_dir/out.txt
 """
 
@@ -58,7 +58,7 @@ def test_get_header():
 #PBS -l walltime=01:00:00,select=1:ncpus=1:mem=16gb
 #PBS -N example_job
 #PBS -A allocation_name
-#PBS -j oe 
+#PBS -j oe
 #PBS -o output_dir/^array_index^.txt
 #PBS -J 1-10
 """
@@ -81,12 +81,48 @@ def test_get_job_string():
 #PBS -l walltime=01:00:00,select=1:ncpus=1:mem=16gb
 #PBS -N example_job
 #PBS -A allocation_name
-#PBS -j oe 
+#PBS -j oe
 #PBS -o output_dir/out.txt
 
 module load python
 echo 'hello world'
 """
+
+def test_get_array_job_string():
+    job_string = get_job_string(
+        job_array=["echo 'hello world'"]*3,        
+        prefix='module load python',
+        job_name="example_job",
+        allocation="allocation_name",
+        output_dir="output_dir",
+        walltime_mins=60,
+        nodes=1,
+        cpus=1
+    )
+
+    assert job_string == f"""#!/bin/bash
+#PBS -l walltime=01:00:00,select=1:ncpus=1:mem=16gb
+#PBS -N example_job
+#PBS -A allocation_name
+#PBS -j oe
+#PBS -o output_dir/^array_index^.txt
+#PBS -J 1-3
+
+module load python
+case $PBS_ARRAY_INDEX in
+1)
+echo 'hello world'
+;;
+2)
+echo 'hello world'
+;;
+3)
+echo 'hello world'
+;;
+
+esac
+"""
+
 
 # def test_run_job():
 #     fname = 'example_job.sh'
