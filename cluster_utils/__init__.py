@@ -1,13 +1,11 @@
 """
 Utilities for writing and running Slurm/PBS jobs.
-
-TODO:
-- Test with Slurm
 """
 
 import datetime
 import os
 import uuid
+import collections.abc
 
 try:
     DEFAULT_JOB_DIR = os.environ['CLUSTER_UTILS_JOB_DIR']
@@ -15,6 +13,27 @@ except KeyError:
     DEFAULT_JOB_DIR = '~/scratch/gregdeon/jobs'
     print(f'CLUSTER_UTILS_JOB_DIR not set; using default of {DEFAULT_JOB_DIR}')
 
+try:
+    DEFAULT_PLATFORM = os.environ['CLUSTER_UTILS_PLATFORM']
+except KeyError:
+    DEFAULT_PLATFORM = 'slurm'
+    print(f'CLUSTER_UTILS_PLATFORM not set; using default of {DEFAULT_PLATFORM}')
+
+# --- Utility functions ---
+def update_dict(d, u):
+    """
+    Update a nested dictionary.
+
+    See https://stackoverflow.com/a/3233356/1079728
+    """
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update_dict(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
+
+# --- Job writing functions ---
 def format_walltime_str(walltime_mins):
     """
     Format a walltime in minutes as a string.
@@ -42,7 +61,7 @@ def format_walltime_str(walltime_mins):
     else:
         return f'{days}-{hours:02d}:{minutes:02d}:00'
 
-def get_header(job_name, allocation, output_dir, walltime_mins=180, nodes=1, cpus=1, mem_gb=16, gpus=0, gpu_mem_gb=None, array_len=None, slurm=False):
+def get_header(job_name, allocation, output_dir, walltime_mins=180, nodes=1, cpus=1, mem_gb=16, gpus=0, gpu_mem_gb=None, array_len=None, platform='slurm'):
     """
     Get the header for a PBS/Slurm script.
     
@@ -63,7 +82,7 @@ def get_header(job_name, allocation, output_dir, walltime_mins=180, nodes=1, cpu
     """
 
     walltime_str = format_walltime_str(walltime_mins)
-    if slurm:
+    if platform == 'slurm':
         if array_len is not None: # array job
             output_path = f'{output_dir}/%x-%j-%a.txt'
             array_str = f'#SBATCH --array=1-{array_len}\n'
@@ -71,21 +90,22 @@ def get_header(job_name, allocation, output_dir, walltime_mins=180, nodes=1, cpu
             output_path = f'{output_dir}/%x-%j.txt'
             array_str = ''
 
+        gpu_str = f'--gres=gpu:{gpus}' if gpus > 0 else ''
         gpu_mem_str = f'#SBATCH --mem-per-gpu={gpu_mem_gb}gb' if gpu_mem_gb is not None else ''
 
         return f'''#!/bin/bash
 #SBATCH --time={walltime_str}
 #SBATCH --nodes={nodes}
 #SBATCH --ntasks-per-node={cpus}
-#SBATCH --gres=gpu:{gpus}
 #SBATCH --mem={mem_gb}gb
+{gpu_str}
 {gpu_mem_str}
 #SBATCH --job-name={job_name}
 #SBATCH --account={allocation}
 #SBATCH --output={output_dir}/%x-%j.txt
 {array_str}'''
 
-    else:
+    elif platform == 'pbs':
         if array_len is not None: # array job
             output_path = f'{output_dir}/^array_index^.txt'
             array_str = f'#PBS -J 1-{array_len}\n'
@@ -103,6 +123,8 @@ def get_header(job_name, allocation, output_dir, walltime_mins=180, nodes=1, cpu
 #PBS -j oe
 #PBS -o {output_path}
 {array_str}'''
+    else:
+        raise ValueError(f'Platform {platform} not recognized; must be one of ["slurm", "pbs"]')
 
 def get_job_string(job=None, job_array=None, prefix='', slurm=False, **header_kwargs):
     """
@@ -145,7 +167,12 @@ def run_job(fname=None, dry_run=False, verbose=True, **job_kwargs):
 
     if fname is None:
         job_name = job_kwargs['job_name']
-        fname = os.path.join(DEFAULT_JOB_DIR, job_name, 'jobs', f'{job_uuid}.pbs')
+        platform = job_kwargs.get('platform', DEFAULT_PLATFORM)
+        platform_extension = {
+            'slurm': 'sh',
+            'pbs': 'pbs'
+        }[platform]
+        fname = os.path.join(DEFAULT_JOB_DIR, job_name, 'jobs', f'{job_uuid}.{platform_extension}')
     if 'output_dir' not in job_kwargs:
         job_kwargs['output_dir'] = os.path.join(os.path.dirname(os.path.dirname(fname)), 'output', f'{job_uuid}')
 
@@ -175,10 +202,10 @@ def run_job(fname=None, dry_run=False, verbose=True, **job_kwargs):
 """Legacy code below"""
 def write_job(fname, job, header):
     """
-    Write a single job PBS script.
+    Write a single job script.
     
     Arguments: 
-    - fname: .pbs file to create
+    - fname: file to create
     - header: string with directives and common setup
     - job: strings with command to run
     - platform: unused (for compatibility with write_array_job API)
@@ -189,9 +216,9 @@ def write_job(fname, job, header):
 
     print(f'wrote job to {fname}')
 
-def write_array_job(fname, header, jobs, platform='slurm'):
+def write_array_job(fname, header, jobs, platform=DEFAULT_PLATFORM):
     """
-    Write an array job PBS script.
+    Write an array job script.
     
     Arguments:
     - fname: .pbs file to create
